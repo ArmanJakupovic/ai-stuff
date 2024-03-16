@@ -1,1 +1,7 @@
 .DS_Store
+huggingface/bin
+huggingface/data
+huggingface/include
+huggingface/lib
+huggingface/lib64
+huggingface/pyvenv.cfg
