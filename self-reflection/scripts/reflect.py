@@ -1,6 +1,7 @@
 import openai
 import os
 import logging
+import json
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -26,7 +27,7 @@ def generate_response(query):
                 {"role": "system", "content": "You are a helpful assistant."},
                 {"role": "user", "content": query}
             ],
-            max_tokens=8192,  # Adjust based on response length needs
+            max_tokens=8192,
             temperature=0.7
         )
         generated_response = response.choices[0].message.content.strip()
@@ -57,20 +58,47 @@ def evaluate_response(query, response):
     for criterion, prompt in evaluation_prompts.items():
         logging.info(f"Evaluating {criterion}.")
         try:
+            # Define the JSON schema for a score
+            json_schema = {
+                "type": "object",
+                "properties": {
+                    "score": {
+                        "description": f"The {criterion} score between 0 and 1",
+                        "type": "number"
+                    }
+                },
+                "required": ["score"],
+                "additionalProperties": False
+            }
+
             eval_response = openai.chat.completions.create(
-                model="gpt-4o-mini",  # Adjust based on available model
+                model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a response evaluator."},
                     {"role": "user", "content": prompt}
                 ],
-                max_tokens=50,  # Limit to short responses
-                temperature=0.3  # Lower temperature for consistent evaluations
+                response_format={
+                    "type": "json_schema",
+                    "json_schema": {
+                        "name": f"{criterion}_schema",
+                        "schema": json_schema
+                    }
+                },
+                max_tokens=50,
+                temperature=0.3
             )
-            score_text = eval_response.choices[0].message.content.strip()
-            # Extract numeric score from the evaluator's response
-            score = float(score_text) if score_text.replace('.', '', 1).isdigit() else 0.5  # Default if parsing fails
+            
+            response_content = eval_response.choices[0].message.content
+            try:
+                score_data = json.loads(response_content) if isinstance(response_content, str) else response_content
+                score = score_data.get("score", 0.5)
+            except json.JSONDecodeError:
+                logging.error(f"Failed to parse JSON for {criterion} score. Defaulting to 0.5.")
+                score = 0.5
+
             metrics[criterion] = round(score, 2)
             logging.info(f"{criterion.capitalize()} score: {metrics[criterion]}")
+
         except Exception as e:
             logging.error(f"Error evaluating {criterion}: {e}")
             metrics[criterion] = 0.5  # Default score in case of error
