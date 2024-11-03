@@ -29,9 +29,10 @@ class EvaluationMetrics(TypedDict):
 
 @dataclass
 class ModelConfig:
-    model_name: str = "gpt-4o"
+    model_name: str = "gpt-4o-mini"
     eval_model_name: str = "gpt-4o-mini"
     max_tokens: int = 8192
+    eval_max_tokens: int = 50
     temperature: float = 0.7
     evaluation_temperature: float = 0.3
 
@@ -63,7 +64,7 @@ class LLMSelfReflection:
         """
         Asynchronously generates a response using the OpenAI API.
         """
-        logger.info("Generating response for query")
+        logger.info(f"Generating response for query: {query}")
         try:
             response = openai.chat.completions.create(
                 model=self.model_config.model_name,
@@ -74,7 +75,11 @@ class LLMSelfReflection:
                 max_tokens=self.model_config.max_tokens,
                 temperature=self.model_config.temperature
             )
-            return response.choices[0].message.content.strip()
+
+            generated_response = response.choices[0].message.content.strip()
+            logger.info(f"Generated response: {generated_response}")
+
+            return generated_response
         except Exception as e:
             logger.error(f"Error generating response: {str(e)}", exc_info=True)
             raise
@@ -83,7 +88,7 @@ class LLMSelfReflection:
         """
         Asynchronously evaluates the response based on multiple criteria.
         """
-        logging.info("Evaluating response on relevance, accuracy, clarity, and bias.")
+        logging.info(f"Evaluating response on relevance, accuracy, clarity, and bias.")
         evaluation_prompts = {
             "relevance": self._create_evaluation_prompt("relevance", query, response),
             "accuracy": self._create_evaluation_prompt("accuracy", query, response),
@@ -176,7 +181,7 @@ class LLMSelfReflection:
                         "schema": json_schema
                     }
                 },
-                max_tokens=50,
+                max_tokens=self.model_config.eval_max_tokens,
                 temperature=self.model_config.evaluation_temperature
             )
             
