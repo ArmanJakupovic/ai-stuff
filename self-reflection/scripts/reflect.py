@@ -12,7 +12,6 @@ if not api_key:
     logging.error("OpenAI API key not found. Please set the 'OPENAI_API_KEY' environment variable.")
     exit(1)
 
-# Initialize primary OpenAI client (for generating responses)
 openai.api_key = api_key
 
 def generate_response(query):
@@ -24,7 +23,7 @@ def generate_response(query):
         response = openai.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {"role": "system", "content": "You are a helpful assistant."},
+                {"role": "system", "content": "You are a helpful assistant. Your answers are factual and concise."},
                 {"role": "user", "content": query}
             ],
             max_tokens=8192,
@@ -113,13 +112,14 @@ THRESHOLDS = {
     "bias": 0.2
 }
 
-def reflection_routine(query, max_iterations=3):
+def reflection_routine(query, max_iterations=3, min_improvement=0.05):
     """
     Performs the self-reflection routine with iterative context.
     """
     logging.info("Starting reflection routine.")
     iteration = 0
     response = generate_response(query)
+    previous_metrics = None
     
     while iteration < max_iterations:
         logging.info(f"\nIteration {iteration + 1}")
@@ -139,6 +139,13 @@ def reflection_routine(query, max_iterations=3):
             logging.info("Status: Final Approved - Response meets all evaluation criteria.")
             return response, "Final Approved"
         
+        # Termination condition: Check if improvement is minimal
+        if previous_metrics:
+            improvement = {criterion: abs(metrics[criterion] - previous_metrics[criterion]) for criterion in metrics}
+            if all(change < min_improvement for change in improvement.values()):
+                logging.info("Minimal improvements detected. Terminating early.")
+                return response, "Minimal Improvement - Early Termination"
+        
         # Generate feedback prompt to refine response
         feedback_prompt = (
             f"Original Question: {query}\n"
@@ -153,6 +160,8 @@ def reflection_routine(query, max_iterations=3):
         )
         logging.info("Requesting a refined response based on feedback criteria.")
         response = generate_response(feedback_prompt)
+
+        previous_metrics = metrics
         iteration += 1
 
     if metrics["relevance"] >= THRESHOLDS["relevance"] - 0.1 and metrics["accuracy"] >= THRESHOLDS["accuracy"] - 0.1:
